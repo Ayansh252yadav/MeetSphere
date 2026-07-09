@@ -1,0 +1,226 @@
+.meetVideoContainer {
+  position: relative;
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  background: linear-gradient(160deg, #0b1220 0%, #131b2e 55%, #0e1524 100%);
+  font-family: 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
+
+.conferenceView {
+  height: 100%;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-content: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px 24px 110px 24px;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.videoTile {
+  position: relative;
+  background: #1b2436;
+  border-radius: 14px;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.videoTile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.videoTile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: #10151f;
+}
+
+
+
+.selfTile {
+  position: absolute;
+  bottom: 100px;
+  right: 24px;
+  z-index: 20;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  transition: transform 0.2s ease;
+}
+
+.selfTile:hover {
+  transform: scale(1.03);
+}
+
+.meetUserVideo {
+  height: 22vh;
+  width: 22vw;
+  min-width: 180px;
+  min-height: 120px;
+  max-width: 280px;
+  object-fit: cover;
+  display: block;
+  transform: scaleX(-1); 
+  background: #10151f;
+}
+
+
+
+.tileLabel {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  border-radius: 6px;
+  letter-spacing: 0.2px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+
+
+.buttonContainers {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  background: rgba(20, 26, 41, 0.85);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  opacity: 0.95;
+  transition: all 0.25s ease;
+}
+
+.buttonContainers:hover {
+  transform: translateX(-50%) translateY(-4px);
+  opacity: 1;
+}
+
+.buttonContainers svg {
+  font-size: 1.6rem;
+}
+
+.buttonContainers button {
+  background: rgba(255, 255, 255, 0.06);
+  margin: 0 4px;
+  transition: background 0.2s ease;
+}
+
+.buttonContainers button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+
+
+.chatRoom {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: 320px;
+  max-width: 85vw;
+  background: #ffffff;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.25);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+}
+
+.chatContainer {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 16px 20px;
+  box-sizing: border-box;
+}
+
+.chatContainer h1 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #1b2436;
+  margin: 4px 0 12px 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.chattingDisplay {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+  margin-bottom: 12px;
+}
+
+.chattingDisplay p {
+  margin: 2px 0;
+  color: #2c3446;
+  font-size: 0.9rem;
+  word-break: break-word;
+}
+
+.chattingArea {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.chattingArea > * {
+  width: 100%;
+}
+
+
+
+.chattingDisplay::-webkit-scrollbar,
+.conferenceView::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chattingDisplay::-webkit-scrollbar-thumb,
+.conferenceView::-webkit-scrollbar-thumb {
+  background: rgba(120, 120, 120, 0.4);
+  border-radius: 3px;
+}
+
+
+
+@media (max-width: 640px) {
+  .selfTile {
+    right: 12px;
+    bottom: 90px;
+  }
+
+  .meetUserVideo {
+    width: 30vw;
+    height: 18vh;
+  }
+
+  .chatRoom {
+    width: 100%;
+  }
+}

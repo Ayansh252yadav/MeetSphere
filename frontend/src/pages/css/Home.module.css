@@ -1,0 +1,106 @@
+.container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 16px 24px;
+  gap: 12px;
+}
+
+.navbar h2 {
+  font-size: 1.4rem;
+  margin: 0;
+}
+
+.navButtons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meetcontainer {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  padding: 24px 48px;
+  gap: 32px;
+}
+
+.leftPanel {
+  flex: 1 1 400px;
+  min-width: 280px;
+}
+
+.leftPanel h3 {
+  font-size: 1.6rem;
+  margin-bottom: 20px;
+}
+
+.joinBox {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.textField {
+  flex: 1 1 200px;
+}
+
+.rightPanel {
+  flex: 1 1 400px;
+  min-width: 280px;
+  display: flex;
+  justify-content: center;
+}
+
+.rightPanel img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Tablet */
+@media (max-width: 900px) {
+  .meetcontainer {
+    padding: 24px;
+  }
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  .navbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .meetcontainer {
+    flex-direction: column-reverse;
+    text-align: center;
+    padding: 16px;
+  }
+
+  .leftPanel h3 {
+    font-size: 1.3rem;
+  }
+
+  .joinBox {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .textField {
+    width: 100%;
+  }
+
+  .rightPanel img {
+    max-width: 80%;
+  }
+}

@@ -8,7 +8,7 @@ const usernames={}; // NEW: socket.id -> username
 const connectToSocket=(server)=>{
     const io=new Server(server,{
         cors:{
-            origin:"http://localhost:5173",
+            origin: process.env.CLIENT_URL,
             methods:["GET","POST"],
             allowedHeaders:["*"],
             credentials:true

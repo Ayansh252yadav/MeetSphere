@@ -11,7 +11,7 @@ import ScreenShareIcon from '@mui/icons-material/ScreenShare';
 import StopScreenShareIcon from '@mui/icons-material/StopScreenShare';
 import ChatIcon from '@mui/icons-material/Chat';
 import { Badge, IconButton } from "@mui/material";
-const server_url =  `${import.meta.env.VITE_BACKEND_URL}/login`,;
+const server_url =  `${import.meta.env.VITE_BACKEND_URL}`
 
 const connections = {};
 

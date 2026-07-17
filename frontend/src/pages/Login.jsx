@@ -72,7 +72,7 @@ export default function Login({ changePage }) {
     console.log("Login Data:", loginData);
 
     try {
-      const res = await axios.post("http://localhost:8080/login", loginData, {
+      const res = await axios.post( `${import.meta.env.VITE_BACKEND_URL}/login`, loginData, {
     withCredentials: true,
   })
       if (res.data.success) {

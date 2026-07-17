@@ -83,7 +83,7 @@ export default function SignUp({changePage}) {
 
     console.log(signUpData);
 try{
-    const res =await axios.post("http://localhost:8080/signup", signUpData, {
+    const res =await axios.post( `${import.meta.env.VITE_BACKEND_URL}/signup`, signUpData, {
     withCredentials: true,
   });
   console.log("Signup response:", res.data);

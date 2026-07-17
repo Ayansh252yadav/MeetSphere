@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from "react";
 import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
 import io from "socket.io-client";
-import styles from './css/VideoComponent.module.css'
 import VideocamIcon from '@mui/icons-material/Videocam';
 import VideocamOffIcon from '@mui/icons-material/VideocamOff';
 import CallEndIcon from '@mui/icons-material/CallEnd';
@@ -24,6 +23,89 @@ const peerConfigConnections = {
   ],
 };
 
+
+const ChatPanel = React.memo(function ChatPanel({ messages, onSend, darkFieldSx }) {
+  const [ draft, setDraft ] = useState("");
+
+  const handleSend = () => {
+    if (draft.trim() === "") return;
+    onSend(draft);
+    setDraft("");
+  };
+
+  return (
+    <div className="flex h-full w-full max-w-sm flex-col border-r border-white/10 bg-slate-900/95 backdrop-blur">
+      <div className="flex h-full flex-col p-4">
+        <h1 className="mb-3 text-lg font-semibold">Chat</h1>
+
+        <div className="flex-1 space-y-4 overflow-y-auto pr-1">
+          {messages.length !== 0 ? (
+            messages.map((item, index) => (
+              <div key={index} className="rounded-lg bg-white/5 p-2">
+                <p className="text-sm font-bold text-indigo-300">{item.sender}</p>
+                <p className="text-sm text-white/90 break-words">{item.data}</p>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-white/50">No Messages Yet</p>
+          )}
+        </div>
+
+        <div className="mt-3 flex items-center gap-2">
+          <TextField
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleSend(); }}
+            id="outlined-basic"
+            label="Enter Your chat"
+            variant="outlined"
+            size="small"
+            fullWidth
+            sx={darkFieldSx}
+          />
+          <Button
+            variant="contained"
+            onClick={handleSend}
+            className="!bg-indigo-600 hover:!bg-indigo-500 !normal-case"
+          >
+            Send
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+
+
+const VideoGrid = React.memo(function VideoGrid({ videos, usernames }) {
+  return (
+    <div className="grid h-full w-full grid-cols-1 gap-2 overflow-y-auto p-2 sm:grid-cols-2 lg:grid-cols-3">
+      {videos.map((video) => (
+        <div
+          key={video.socketId}
+          className="relative overflow-hidden rounded-xl bg-black"
+        >
+          <video
+            data-socket={video.socketId}
+            ref={ref => {
+           
+              if (ref && video.stream && ref.srcObject !== video.stream) {
+                ref.srcObject = video.stream;
+              }
+            }}
+            autoPlay
+            className="aspect-video w-full object-cover"
+          ></video>
+          <span className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-0.5 text-xs">
+            {usernames[ video.socketId ] || `Participant ${video.socketId.slice(0, 5)}`}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+});
+
 const VideoMeet = () => {
   const socketRef = useRef();
   const socketIdRef = useRef();
@@ -40,16 +122,22 @@ const VideoMeet = () => {
   const [ screenAvailable, setScreenAvailable ] = useState(false);
 
   const [ messages, setMessages ] = useState([]);
-  const [ message, setMessage ] = useState("");
   const [ newMessages, setNewMessages ] = useState(0);
 
   const [ askForUsername, setAskForUsername ] = useState(true);
   const [ username, setUsername ] = useState("");
 
+  // socketId -> username map for every participant in the call
+  const [ usernames, setUsernames ] = useState({});
+  const usernamesRef = useRef({});
+
   const videoRef = useRef([]);
   const [ videos, setVideos ] = useState([]);
 
- 
+  useEffect(() => {
+    usernamesRef.current = usernames;
+  }, [ usernames ]);
+
   const getPermissions = async () => {
     try {
       const userMediaStream = await navigator.mediaDevices.getUserMedia({
@@ -200,23 +288,16 @@ const VideoMeet = () => {
         const pc = connections[ fromId ];
         if (!pc) return;
 
-        console.log("--------------------------------");
-        console.log("Received SDP:", signal.sdp.type);
-        console.log("From:", fromId);
-        console.log("Current signalingState:", pc.signalingState);
-
         if (
           signal.sdp.type === "answer" &&
           pc.signalingState !== "have-local-offer"
         ) {
-          console.log("Ignoring duplicate answer");
           return;
         }
 
         pc.setRemoteDescription(new RTCSessionDescription(signal.sdp))
           .then(() => {
             if (signal.sdp.type === "offer") {
-              console.log("Creating ANSWER for:", fromId);
               return pc.createAnswer();
             }
           })
@@ -252,29 +333,33 @@ const VideoMeet = () => {
     }
   };
 
-  const sendMessage = () => {
-    if (message.trim() === "") return;
-    socketRef.current.emit("chat-message", message, username);
-    setMessage("");
+  const sendMessage = (text) => {
+    if (!text || text.trim() === "") return;
+    socketRef.current.emit("chat-message", text, username);
   };
 
   const connectToSocketServer = () => {
     socketRef.current = io(server_url);
 
     socketRef.current.on("connect", () => {
-      console.log("Connected:", socketRef.current.id);
-
       socketIdRef.current = socketRef.current.id;
 
       socketRef.current.emit(
         "join-call",
-        window.location.href
+        window.location.href,
+        username
       );
+
+      setUsernames((prev) => ({ ...prev, [ socketRef.current.id ]: username }));
     });
 
     socketRef.current.on("signal", gotMessageFromServer);
 
     socketRef.current.on("chat-message", addMessage);
+
+    socketRef.current.on("user-name", (id, name) => {
+      setUsernames((prev) => ({ ...prev, [ id ]: name }));
+    });
 
     socketRef.current.on("user-left", (id) => {
       setVideos((videos) =>
@@ -285,6 +370,12 @@ const VideoMeet = () => {
         connections[ id ].close();
       }
       delete connections[ id ];
+
+      setUsernames((prev) => {
+        const next = { ...prev };
+        delete next[ id ];
+        return next;
+      });
     });
 
     socketRef.current.on("user-joined", (id, clients) => {
@@ -307,7 +398,6 @@ const VideoMeet = () => {
           }
         };
 
-       
         connections[ socketListId ].ontrack = (event) => {
           const stream = event.streams[ 0 ];
 
@@ -342,7 +432,6 @@ const VideoMeet = () => {
           }
         };
 
-        
         let streamToAdd = window.localStream;
         if (!streamToAdd) {
           let blackSilence = (...args) => new MediaStream([ black(...args), silence() ]);
@@ -360,7 +449,6 @@ const VideoMeet = () => {
           if (id2 === socketIdRef.current) continue;
 
           try {
-            console.log("Creating OFFER for:", id2);
             connections[ id2 ]
               .createOffer()
               .then((description) => {
@@ -412,7 +500,6 @@ const VideoMeet = () => {
       }
     } else {
       setScreen(false);
-  
       getUserMedia();
     }
   };
@@ -435,101 +522,124 @@ const VideoMeet = () => {
     window.location.href = "/home";
   };
 
+  const darkFieldSx = {
+    input: { color: "white" },
+    label: { color: "rgba(255,255,255,0.6)" },
+    "& .MuiOutlinedInput-root": {
+      "& fieldset": { borderColor: "rgba(255,255,255,0.3)" },
+      "&:hover fieldset": { borderColor: "rgba(255,255,255,0.6)" },
+      "&.Mui-focused fieldset": { borderColor: "#6366f1" },
+    },
+  };
+
   return (
-    <div>
+    <div className="min-h-screen w-full bg-slate-950 text-white">
 
-      {askForUsername === true ?
+      {askForUsername === true ? (
 
-        <div>
+        <div className="flex min-h-screen w-full flex-col items-center justify-center gap-6 px-4">
+          <h2 className="text-2xl font-semibold tracking-tight">Enter into Lobby</h2>
 
-          <h2>Enter into Lobby </h2>
-          <TextField id="outlined-basic" label="Username" value={username} onChange={e => setUsername(e.target.value)} variant="outlined" />
-          <Button variant="contained" onClick={connect}>Connect</Button>
-
-          <div>
-            <video ref={localVideoRef} autoPlay muted></video>
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-black shadow-lg">
+            <video
+              ref={localVideoRef}
+              autoPlay
+              muted
+              className="aspect-video w-full object-cover"
+            ></video>
           </div>
 
-        </div> :
+          <div className="flex w-full max-w-md flex-col gap-3 sm:flex-row sm:items-center">
+            <TextField
+              id="outlined-basic"
+              label="Username"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              variant="outlined"
+              size="small"
+              fullWidth
+              sx={darkFieldSx}
+            />
+            <Button
+              variant="contained"
+              onClick={connect}
+              className="!bg-indigo-600 hover:!bg-indigo-500 !normal-case"
+            >
+              Connect
+            </Button>
+          </div>
+        </div>
 
-        <div className={styles.meetVideoContainer}>
+      ) : (
 
-          {showModal ? <div className={styles.chatRoom}>
+        <div className="relative flex h-screen w-full overflow-hidden bg-slate-950">
 
-            <div className={styles.chatContainer}>
-              <h1>Chat</h1>
+          {/* Chat panel — isolated into its own component so that typing
+              a message only re-renders this subtree, not the whole
+              VideoMeet tree (video grid, controls, etc). */}
+          {showModal && (
+            <ChatPanel
+              messages={messages}
+              onSend={sendMessage}
+              darkFieldSx={darkFieldSx}
+            />
+          )}
 
-              <div className={styles.chattingDisplay}>
+          {/* Main stage */}
+          <div className="relative flex-1">
 
-                {messages.length !== 0 ? messages.map((item, index) => {
-                  return (
-                    <div style={{ marginBottom: "20px" }} key={index}>
-                      <p style={{ fontWeight: "bold" }}>{item.sender}</p>
-                      <p>{item.data}</p>
-                    </div>
-                  );
-                }) : <p>No Messages Yet</p>}
-
-              </div>
-
-              <div className={styles.chattingArea}>
-                <TextField value={message} onChange={(e) => setMessage(e.target.value)} id="outlined-basic" label="Enter Your chat" variant="outlined" />
-                <Button variant='contained' onClick={sendMessage}>Send</Button>
-              </div>
-
-            </div>
-          </div> : <></>}
-
-          <div className={styles.buttonContainers}>
-            <IconButton onClick={handleVideo} style={{ color: "white" }}>
-              {(video === true) ? <VideocamIcon /> : <VideocamOffIcon />}
-            </IconButton>
-            <IconButton onClick={handleEndCall} style={{ color: "red" }}>
-              <CallEndIcon />
-            </IconButton>
-            <IconButton onClick={handleAudio} style={{ color: "white" }}>
-              {audio === true ? <MicIcon /> : <MicOffIcon />}
-            </IconButton>
-
-            {screenAvailable === true ?
-              <IconButton onClick={handleScreen} style={{ color: "white" }}>
-                {screen === true ? <StopScreenShareIcon /> : <ScreenShareIcon />}
-              </IconButton> : <></>}
-
-            <Badge badgeContent={newMessages} max={999} color='error'>
-              <IconButton onClick={() => { setShowModal(!showModal); setNewMessages(0); }} style={{ color: "white" }}>
-                <ChatIcon />
+            {/* Controls */}
+            <div className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full bg-black/60 px-5 py-3 backdrop-blur">
+              <IconButton onClick={handleVideo} className="!text-white">
+                {video === true ? <VideocamIcon /> : <VideocamOffIcon />}
               </IconButton>
-            </Badge>
+              <IconButton
+                onClick={handleEndCall}
+                className="!bg-red-600 hover:!bg-red-500 !text-white"
+              >
+                <CallEndIcon />
+              </IconButton>
+              <IconButton onClick={handleAudio} className="!text-white">
+                {audio === true ? <MicIcon /> : <MicOffIcon />}
+              </IconButton>
 
-          </div>
+              {screenAvailable === true && (
+                <IconButton onClick={handleScreen} className="!text-white">
+                  {screen === true ? <StopScreenShareIcon /> : <ScreenShareIcon />}
+                </IconButton>
+              )}
 
-          <div className={styles.selfTile}>
-            <video className={styles.meetUserVideo} ref={localVideoRef} autoPlay muted></video>
-            <span className={styles.tileLabel}>{username ? `${username} (You)` : "You"}</span>
-          </div>
-
-          <div className={styles.conferenceView}>
-            {videos.map((video) => (
-              <div className={styles.videoTile} key={video.socketId}>
-                <video
-                  data-socket={video.socketId}
-                  ref={ref => {
-                    if (ref && video.stream) {
-                      ref.srcObject = video.stream;
-                    }
-                  }}
-                  autoPlay
+              <Badge badgeContent={newMessages} max={999} color="error">
+                <IconButton
+                  onClick={() => { setShowModal(!showModal); setNewMessages(0); }}
+                  className="!text-white"
                 >
-                </video>
-                <span className={styles.tileLabel}>{`Participant ${video.socketId.slice(0, 5)}`}</span>
-              </div>
-            ))}
+                  <ChatIcon />
+                </IconButton>
+              </Badge>
+            </div>
+
+            {/* Self video (picture-in-picture) */}
+            <div className="absolute bottom-24 right-6 z-20 w-40 overflow-hidden rounded-xl border border-white/20 bg-black shadow-lg sm:w-52">
+              <video
+                className="aspect-video w-full object-cover"
+                ref={localVideoRef}
+                autoPlay
+                muted
+              ></video>
+              <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-xs">
+                {username ? `${username} (You)` : "You"}
+              </span>
+            </div>
+
+          
+            <VideoGrid videos={videos} usernames={usernames} />
+
           </div>
 
         </div>
 
-      }
+      )}
 
     </div>
   );

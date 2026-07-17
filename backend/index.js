@@ -4,7 +4,7 @@ require("dotenv").config();
 
 const express =require("express");
 const app=express();
-const port=8080;
+const port = process.env.PORT || 8080;
 const {createServer} = require("node:http");
 
 const cors=require("cors");
@@ -29,9 +29,9 @@ const server=createServer(app);
 const io=connectToSocket(server);
 const cookieParser = require("cookie-parser");
 app.use(cors({
-    origin: "http://localhost:5173",
+    origin: process.env.CLIENT_URL,
     credentials: true,
-  }));
+}));
 app.use(express.json());
 app.use(express.urlencoded({extended:true}));
 app.use(cookieParser());

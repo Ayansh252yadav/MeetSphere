@@ -106,6 +106,58 @@ const VideoGrid = React.memo(function VideoGrid({ videos, usernames }) {
   );
 });
 
+// Shown instead of VideoGrid whenever someone in the room is screen
+// sharing. The presenter's stream fills the stage; everyone else
+// (including the local user, if they aren't the presenter) is
+// demoted to a small scrollable thumbnail strip along the bottom.
+const FocusedStage = React.memo(function FocusedStage({ presenterStream, presenterLabel, thumbnails }) {
+  return (
+    <div className="flex h-full w-full flex-col bg-black">
+      <div className="relative flex-1 overflow-hidden bg-black">
+        <video
+          ref={ref => {
+            if (ref && presenterStream && ref.srcObject !== presenterStream) {
+              ref.srcObject = presenterStream;
+            }
+          }}
+          autoPlay
+          className="h-full w-full object-contain"
+        ></video>
+        {presenterLabel && (
+          <span className="absolute bottom-3 left-3 rounded bg-black/60 px-2 py-1 text-xs">
+            {presenterLabel} is presenting
+          </span>
+        )}
+      </div>
+
+      {thumbnails.length > 0 && (
+        <div className="flex w-full flex-shrink-0 gap-2 overflow-x-auto bg-slate-950/90 p-2">
+          {thumbnails.map((t) => (
+            <div
+              key={t.socketId}
+              className="relative h-24 w-40 flex-shrink-0 overflow-hidden rounded-lg bg-black"
+            >
+              <video
+                ref={ref => {
+                  if (ref && t.stream && ref.srcObject !== t.stream) {
+                    ref.srcObject = t.stream;
+                  }
+                }}
+                autoPlay
+                muted={t.muted}
+                className="h-full w-full object-cover"
+              ></video>
+              <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1 py-0.5 text-[10px]">
+                {t.label}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
 const VideoMeet = () => {
   const socketRef = useRef();
   const socketIdRef = useRef();
@@ -133,6 +185,10 @@ const VideoMeet = () => {
 
   const videoRef = useRef([]);
   const [ videos, setVideos ] = useState([]);
+
+  // socketId of whoever is currently sharing their screen (or null).
+  // Drives the full-screen "focused" presenter layout below.
+  const [ screenSharingId, setScreenSharingId ] = useState(null);
 
   useEffect(() => {
     usernamesRef.current = usernames;
@@ -361,6 +417,17 @@ const VideoMeet = () => {
       setUsernames((prev) => ({ ...prev, [ id ]: name }));
     });
 
+    // A peer started/stopped sharing their screen. The server should
+    // relay this to everyone else in the room, echoing back the
+    // sender's socket id as the first argument (same pattern as
+    // "user-name" above).
+    socketRef.current.on("screen-share-status", (id, isSharing) => {
+      setScreenSharingId((prev) => {
+        if (isSharing) return id;
+        return prev === id ? null : prev;
+      });
+    });
+
     socketRef.current.on("user-left", (id) => {
       setVideos((videos) =>
         videos.filter((video) => video.socketId !== id)
@@ -376,6 +443,8 @@ const VideoMeet = () => {
         delete next[ id ];
         return next;
       });
+
+      setScreenSharingId((prev) => (prev === id ? null : prev));
     });
 
     socketRef.current.on("user-joined", (id, clients) => {
@@ -488,9 +557,14 @@ const VideoMeet = () => {
       try {
         const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
         setScreen(true);
+        setScreenSharingId(socketIdRef.current);
+        socketRef.current?.emit("screen-share-status", true);
 
         stream.getVideoTracks()[ 0 ].onended = () => {
           setScreen(false);
+          setScreenSharingId((prev) => (prev === socketIdRef.current ? null : prev));
+          socketRef.current?.emit("screen-share-status", false);
+          getUserMedia();
         };
 
         getUserMediaSuccess(stream);
@@ -500,6 +574,8 @@ const VideoMeet = () => {
       }
     } else {
       setScreen(false);
+      setScreenSharingId((prev) => (prev === socketIdRef.current ? null : prev));
+      socketRef.current?.emit("screen-share-status", false);
       getUserMedia();
     }
   };
@@ -531,6 +607,47 @@ const VideoMeet = () => {
       "&.Mui-focused fieldset": { borderColor: "#6366f1" },
     },
   };
+
+  // Is the local user the one currently presenting their screen?
+  const isSelfPresenting = !!screenSharingId && screenSharingId === socketIdRef.current;
+
+  // The stream to show big on the main stage: local screen-share
+  // stream if it's us, otherwise the matching remote peer's stream.
+  const presenterStream = screenSharingId
+    ? (isSelfPresenting
+        ? window.localStream
+        : videos.find((v) => v.socketId === screenSharingId)?.stream)
+    : null;
+
+  const presenterLabel = screenSharingId
+    ? (isSelfPresenting
+        ? (username ? `${username} (You)` : "You")
+        : (usernames[ screenSharingId ] || `Participant ${screenSharingId.slice(0, 5)}`))
+    : "";
+
+  // Everyone else, shrunk down into a thumbnail strip while someone
+  // is presenting. Includes the local user if they aren't the one
+  // presenting.
+  const thumbnails = screenSharingId
+    ? [
+        ...(!isSelfPresenting
+          ? [ {
+              socketId: socketIdRef.current || "self",
+              stream: window.localStream,
+              label: username ? `${username} (You)` : "You",
+              muted: true,
+            } ]
+          : []),
+        ...videos
+          .filter((v) => v.socketId !== screenSharingId)
+          .map((v) => ({
+            socketId: v.socketId,
+            stream: v.stream,
+            label: usernames[ v.socketId ] || `Participant ${v.socketId.slice(0, 5)}`,
+            muted: false,
+          })),
+      ]
+    : [];
 
   return (
     <div className="min-h-screen w-full bg-slate-950 text-white">
@@ -588,8 +705,13 @@ const VideoMeet = () => {
           {/* Main stage */}
           <div className="relative flex-1">
 
-            {/* Controls */}
-            <div className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full bg-black/60 px-5 py-3 backdrop-blur">
+            {/* Controls — floats a little higher when the thumbnail
+                strip is on screen so it doesn't get covered. */}
+            <div
+              className={`absolute left-1/2 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full bg-black/60 px-5 py-3 backdrop-blur ${
+                screenSharingId ? "bottom-28" : "bottom-6"
+              }`}
+            >
               <IconButton onClick={handleVideo} className="!text-white">
                 {video === true ? <VideocamIcon /> : <VideocamOffIcon />}
               </IconButton>
@@ -619,21 +741,33 @@ const VideoMeet = () => {
               </Badge>
             </div>
 
-            {/* Self video (picture-in-picture) */}
-            <div className="absolute bottom-24 right-6 z-20 w-40 overflow-hidden rounded-xl border border-white/20 bg-black shadow-lg sm:w-52">
-              <video
-                className="aspect-video w-full object-cover"
-                ref={localVideoRef}
-                autoPlay
-                muted
-              ></video>
-              <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-xs">
-                {username ? `${username} (You)` : "You"}
-              </span>
-            </div>
+            {screenSharingId ? (
+              <FocusedStage
+                presenterStream={presenterStream}
+                presenterLabel={presenterLabel}
+                thumbnails={thumbnails}
+              />
+            ) : (
+              <>
+                {/* Self video (picture-in-picture) — only shown in the
+                    regular grid layout; while presenting/watching a
+                    presentation, self appears in the thumbnail strip
+                    or as the main stage instead. */}
+                <div className="absolute bottom-24 right-6 z-20 w-40 overflow-hidden rounded-xl border border-white/20 bg-black shadow-lg sm:w-52">
+                  <video
+                    className="aspect-video w-full object-cover"
+                    ref={localVideoRef}
+                    autoPlay
+                    muted
+                  ></video>
+                  <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-xs">
+                    {username ? `${username} (You)` : "You"}
+                  </span>
+                </div>
 
-          
-            <VideoGrid videos={videos} usernames={usernames} />
+                <VideoGrid videos={videos} usernames={usernames} />
+              </>
+            )}
 
           </div>
 

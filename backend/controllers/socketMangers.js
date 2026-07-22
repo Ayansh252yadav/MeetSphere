@@ -3,7 +3,18 @@ const {Server}=require("socket.io");
 const connection={};
 const message={};
 const timeOnline={};
-const usernames={}; // NEW: socket.id -> username
+const usernames={}; // socket.id -> username
+const screenSharing={}; // room path -> socket.id of current presenter (or undefined)
+
+// Finds which room a given socket currently belongs to.
+function findRoom(socketId){
+    for(const [room, members] of Object.entries(connection)){
+        if(members.includes(socketId)){
+            return room;
+        }
+    }
+    return null;
+}
 
 const connectToSocket=(server)=>{
     const io=new Server(server,{
@@ -16,7 +27,7 @@ const connectToSocket=(server)=>{
     });
 
     io.on("connection",(socket)=>{
-        // CHANGED: join-call now accepts a second "username" argument
+        // join-call accepts a second "username" argument
         socket.on("join-call",(path, username)=>{
 
             if(connection[path]===undefined){
@@ -25,26 +36,33 @@ const connectToSocket=(server)=>{
             connection[path].push(socket.id)
             timeOnline[socket.id]=new Date();
 
-            // NEW: remember this socket's username (fallback if not provided)
+            // remember this socket's username (fallback if not provided)
             usernames[socket.id] = username || `User-${socket.id.slice(0,5)}`;
 
             for(let i=0;i<connection[path].length;i++){
                 io.to(connection[path][i]).emit("user-joined",socket.id,connection[path])
             }
 
-            // NEW: tell everyone already in the room this new user's name
+            // tell everyone already in the room this new user's name
             connection[path].forEach((clientId)=>{
                 if(clientId !== socket.id){
                     io.to(clientId).emit("user-name", socket.id, usernames[socket.id]);
                 }
             });
 
-            // NEW: send the new user the names of everyone already present
+            // send the new user the names of everyone already present
             connection[path].forEach((clientId)=>{
                 if(clientId !== socket.id && usernames[clientId]){
                     io.to(socket.id).emit("user-name", clientId, usernames[clientId]);
                 }
             });
+
+            // if someone in this room is already presenting their
+            // screen, let the newly joined user know right away so
+            // their UI switches to the full-screen presenter layout.
+            if(screenSharing[path]){
+                io.to(socket.id).emit("screen-share-status", screenSharing[path], true);
+            }
 
             if(message[path]!=undefined){
                 for(let a=0;a<message[path].length;a++){
@@ -76,6 +94,28 @@ const connectToSocket=(server)=>{
                 });
             }
         })
+
+        // a participant started or stopped sharing their screen.
+        // Broadcast it to everyone else in the same room so their
+        // client can switch into (or out of) the full-screen
+        // presenter layout.
+        socket.on("screen-share-status",(isSharing)=>{
+            const room=findRoom(socket.id);
+            if(!room) return;
+
+            if(isSharing){
+                screenSharing[room]=socket.id;
+            } else if(screenSharing[room]===socket.id){
+                delete screenSharing[room];
+            }
+
+            connection[room].forEach((clientId)=>{
+                if(clientId!==socket.id){
+                    io.to(clientId).emit("screen-share-status", socket.id, isSharing);
+                }
+            });
+        });
+
         socket.on("disconnect",()=>{
           const diffTime=Math.abs(timeOnline[socket.id]-new Date());
           let key;
@@ -96,7 +136,13 @@ const connectToSocket=(server)=>{
             }
           }
 
-          // NEW: clean up the username entry
+          // if the disconnecting user was presenting, clear that
+          // room's presenter so future joiners don't get a stale flag.
+          if(key && screenSharing[key]===socket.id){
+              delete screenSharing[key];
+          }
+
+          // clean up the username entry
           delete usernames[socket.id];
         })
     })
